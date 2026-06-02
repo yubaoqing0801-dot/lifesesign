@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "人生设计系统 - 个人成长与目标管理",
   "scripts": {
-    "build": "node build.js",
+    "build": "cd frontend && npm install && npx vite build && node ../fix-build.js",
     "start": "node backend/server.js",
     "postinstall": "cd backend && npm install"
   },
