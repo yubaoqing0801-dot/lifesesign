@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from '../api';
 
 const categories = ['事业', '健康', '关系', '成长', '财务', '其他'];
@@ -11,6 +11,8 @@ export default function Goals() {
   const [filter, setFilter] = useState({});
   const [form, setForm] = useState({ title: '', description: '', category: '其他', target_date: '' });
   const [editing, setEditing] = useState(null);
+  const [milestones, setMilestones] = useState([]);
+  const [newMilestone, setNewMilestone] = useState('');
 
   useEffect(() => { load(); }, [filter]);
 
@@ -23,8 +25,40 @@ export default function Goals() {
     } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
-  const openCreate = () => { setEditing(null); setForm({ title: '', description: '', category: '其他', target_date: '' }); setShowModal(true); };
-  const openEdit = (g) => { setEditing(g); setForm({ title: g.title, description: g.description, category: g.category, target_date: g.target_date || '' }); setShowModal(true); };
+  const loadMilestones = async (goalId) => {
+    try { setMilestones(await api.goals.milestones.list(goalId)); } catch (e) { setMilestones([]); }
+  };
+
+  const addMilestone = async (goalId) => {
+    if (!newMilestone.trim()) return;
+    try {
+      await api.goals.milestones.create(goalId, { title: newMilestone.trim() });
+      setNewMilestone('');
+      loadMilestones(goalId);
+    } catch (e) { /* ignore */ }
+  };
+
+  const toggleMilestone = async (goalId, mid, completed) => {
+    try {
+      await api.goals.milestones.update(goalId, mid, { completed: completed ? 0 : 1 });
+      loadMilestones(goalId);
+    } catch (e) { /* ignore */ }
+  };
+
+  const deleteMilestone = async (goalId, mid) => {
+    try {
+      await api.goals.milestones.delete(goalId, mid);
+      loadMilestones(goalId);
+    } catch (e) { /* ignore */ }
+  };
+
+  const openCreate = () => { setEditing(null); setForm({ title: '', description: '', category: '其他', target_date: '' }); setMilestones([]); setNewMilestone(''); setShowModal(true); };
+  const openEdit = (g) => {
+    setEditing(g);
+    setForm({ title: g.title, description: g.description, category: g.category, target_date: g.target_date || '' });
+    loadMilestones(g.id);
+    setShowModal(true);
+  };
 
   const submit = async () => {
     if (!form.title.trim()) return;
@@ -118,6 +152,25 @@ export default function Goals() {
                 <input type="date" value={form.target_date} onChange={e => setForm({ ...form, target_date: e.target.value })} />
               </div>
             </div>
+            {editing && (
+              <div style={{ marginTop: 12, padding: '12px 0', borderTop: '1px solid var(--border)' }}>
+                <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--sub)', marginBottom: 8, display: 'block' }}>📋 里程碑 / 子任务</label>
+                <div style={{ marginBottom: 8 }}>
+                  {milestones.map(m => (
+                    <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', fontSize: 14 }}>
+                      <input type="checkbox" checked={!!m.completed} onChange={() => toggleMilestone(editing.id, m.id, m.completed)} style={{ accentColor: 'var(--accent)' }} />
+                      <span style={{ flex: 1, textDecoration: m.completed ? 'line-through' : 'none', color: m.completed ? 'var(--sub)' : 'var(--text)' }}>{m.title}</span>
+                      <button className="btn btn-sm btn-danger" onClick={() => deleteMilestone(editing.id, m.id)} style={{ padding: '2px 6px', fontSize: 11 }}>×</button>
+                    </div>
+                  ))}
+                  {milestones.length === 0 && <div style={{ color: 'var(--sub)', fontSize: 13, padding: '4px 0' }}>还没有子任务</div>}
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input value={newMilestone} onChange={e => setNewMilestone(e.target.value)} onKeyDown={e => e.key === 'Enter' && addMilestone(editing.id)} placeholder="添加子任务…" style={{ flex: 1, padding: '6px 10px', fontSize: 13 }} />
+                  <button className="btn btn-sm btn-primary" onClick={() => addMilestone(editing.id)}>+</button>
+                </div>
+              </div>
+            )}
             <div className="modal-actions">
               <button className="btn btn-outline" onClick={() => setShowModal(false)}>取消</button>
               <button className="btn btn-primary" onClick={submit}>{editing ? '保存' : '创建'}</button>

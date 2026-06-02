@@ -1,4 +1,4 @@
-﻿const BASE = '/api';
+const BASE = '/api';
 
 function getHeaders() {
   const headers = { 'Content-Type': 'application/json' };
@@ -14,7 +14,7 @@ async function request(url, options = {}) {
   });
   if (res.status === 401) {
     localStorage.removeItem('token');
-    window.location.href = '/login';
+    window.dispatchEvent(new Event('auth-expired'));
     throw new Error('请重新登录');
   }
   if (!res.ok) {
@@ -44,6 +44,12 @@ export const api = {
     create: (data) => request('/goals', { method: 'POST', body: JSON.stringify(data) }),
     update: (id, data) => request('/goals/' + id, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id) => request('/goals/' + id, { method: 'DELETE' }),
+    milestones: {
+      list: (goalId) => request('/goals/' + goalId + '/milestones'),
+      create: (goalId, data) => request('/goals/' + goalId + '/milestones', { method: 'POST', body: JSON.stringify(data) }),
+      update: (goalId, mid, data) => request('/goals/' + goalId + '/milestones/' + mid, { method: 'PUT', body: JSON.stringify(data) }),
+      delete: (goalId, mid) => request('/goals/' + goalId + '/milestones/' + mid, { method: 'DELETE' }),
+    },
   },
 
   habits: {
@@ -66,5 +72,30 @@ export const api = {
     list: (limit = 12) => request('/lifewheel?limit=' + limit),
     create: (data) => request('/lifewheel', { method: 'POST', body: JSON.stringify(data) }),
     delete: (id) => request('/lifewheel/' + id, { method: 'DELETE' }),
+  },
+
+  analytics: {
+    weeklySummary: () => request('/analytics/weekly-summary'),
+    habitHeatmap: (days = 90) => request('/analytics/habit-heatmap?days=' + days),
+    goalDistribution: () => request('/analytics/goal-distribution'),
+    moodMonthly: (months = 6) => request('/analytics/mood-monthly?months=' + months),
+  },
+
+  reviews: {
+    list: (type, limit) => {
+      const q = new URLSearchParams();
+      if (type) q.set('type', type);
+      if (limit) q.set('limit', limit);
+      return request('/reviews?' + q.toString());
+    },
+    get: (type, date) => request('/reviews/' + type + '/' + date),
+    create: (data) => request('/reviews', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id, data) => request('/reviews/' + id, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id) => request('/reviews/' + id, { method: 'DELETE' }),
+  },
+
+  settings: {
+    get: () => request('/settings'),
+    update: (data) => request('/settings', { method: 'PUT', body: JSON.stringify(data) }),
   },
 };

@@ -69,3 +69,41 @@ CREATE TABLE IF NOT EXISTS life_wheels (
   created_at TEXT DEFAULT (datetime('now')),
   FOREIGN KEY (user_id) REFERENCES users(id)
 );
+CREATE TABLE IF NOT EXISTS milestones (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  goal_id INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  completed INTEGER DEFAULT 0,
+  sort_order INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (goal_id) REFERENCES goals(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS reviews (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  date TEXT NOT NULL,
+  type TEXT NOT NULL CHECK(type IN ('weekly','monthly')),
+  wins TEXT DEFAULT '',
+  challenges TEXT DEFAULT '',
+  insights TEXT DEFAULT '',
+  focus TEXT DEFAULT '',
+  goal_progress TEXT DEFAULT '',
+  habit_notes TEXT DEFAULT '',
+  mood_analysis TEXT DEFAULT '',
+  next_steps TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS user_settings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER UNIQUE NOT NULL,
+  habit_reminder INTEGER DEFAULT 0,
+  habit_reminder_time TEXT DEFAULT '08:00',
+  journal_reminder INTEGER DEFAULT 0,
+  journal_reminder_time TEXT DEFAULT '21:00',
+  theme TEXT DEFAULT 'light',
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);

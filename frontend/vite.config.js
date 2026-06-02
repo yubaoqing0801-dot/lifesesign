@@ -12,4 +12,17 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    outDir: 'dist',
+    target: 'es2015',
+    modulePreload: false,
+    cssCodeSplit: false,
+    rollupOptions: {
+      output: {
+        format: 'iife',
+        entryFileNames: 'app.js',
+        inlineDynamicImports: true,
+      },
+    },
+  },
 });

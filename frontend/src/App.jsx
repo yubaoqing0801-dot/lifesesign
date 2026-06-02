@@ -1,4 +1,4 @@
-﻿import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Navbar from './components/Navbar';
 import Dashboard from './pages/Dashboard';
@@ -6,6 +6,8 @@ import Goals from './pages/Goals';
 import Habits from './pages/Habits';
 import Journal from './pages/Journal';
 import LifeWheel from './pages/LifeWheel';
+import Reviews from './pages/Reviews';
+import SettingsPage from './pages/Settings';
 import Login from './pages/Login';
 
 function ProtectedRoute({ children }) {
@@ -17,7 +19,6 @@ function ProtectedRoute({ children }) {
 
 function AppLayout() {
   const { user, logout } = useAuth();
-
   if (!user) return null;
 
   return (
@@ -29,6 +30,8 @@ function AppLayout() {
           <Route path="/goals" element={<ProtectedRoute><Goals /></ProtectedRoute>} />
           <Route path="/habits" element={<ProtectedRoute><Habits /></ProtectedRoute>} />
           <Route path="/journal" element={<ProtectedRoute><Journal /></ProtectedRoute>} />
+          <Route path="/reviews" element={<ProtectedRoute><Reviews /></ProtectedRoute>} />
+          <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
           <Route path="/lifewheel" element={<ProtectedRoute><LifeWheel /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
@@ -39,13 +42,13 @@ function AppLayout() {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/*" element={<AppLayout />} />
         </Routes>
       </AuthProvider>
-    </BrowserRouter>
+    </HashRouter>
   );
 }

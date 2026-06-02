@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 
 export default function Navbar({ user, onLogout }) {
@@ -12,9 +12,11 @@ export default function Navbar({ user, onLogout }) {
         <NavLink to="/goals" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>目标</NavLink>
         <NavLink to="/habits" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>习惯</NavLink>
         <NavLink to="/journal" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>日记</NavLink>
+        <NavLink to="/reviews" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>回顾</NavLink>
         <NavLink to="/lifewheel" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>生命之轮</NavLink>
 
-        <div style={{ marginLeft: 'auto', position: 'relative' }}>
+        <NavLink to="/settings" className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')} style={{ marginLeft: 'auto' }}>⚙️</NavLink>
+        <div style={{ position: 'relative' }}>
           <div onClick={() => setShowMenu(!showMenu)}
             style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '6px 12px', borderRadius: 8, background: 'var(--bg)' }}>
             <span style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600 }}>

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { api } from '../api';
 
 const moodEmojis = ['', '😫', '😟', '😐', '😊', '🤩'];
@@ -17,7 +17,6 @@ function MoodChart({ data }) {
 
   const pathD = points.map((p, i) => (i === 0 ? 'M' : 'L') + p.x + ' ' + p.y).join(' ');
 
-  // Grid lines
   const gridLines = [1, 2, 3, 4, 5].map(m => {
     const y = h - pad - ((m - minMood) / (maxMood - minMood)) * (h - pad * 2);
     return <line key={'g'+m} x1={pad} y1={y} x2={w-pad} y2={y} stroke="#e5e5e7" strokeWidth="1" strokeDasharray="4,4" />;
@@ -38,18 +37,34 @@ function MoodChart({ data }) {
   );
 }
 
+function MiniBar({ pct, color }) {
+  return (
+    <div style={{ height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden', flex: 1 }}>
+      <div style={{ height: '100%', width: pct + '%', background: color || 'var(--accent)', borderRadius: 3, transition: 'width 0.3s' }} />
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [data, setData] = useState(null);
   const [moodData, setMoodData] = useState(null);
+  const [weeklySummary, setWeeklySummary] = useState(null);
+  const [goalDist, setGoalDist] = useState(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
 
-  useEffect(() => { load(); loadTrends(); }, []);
-  const load = async () => {
-    try { setData(await api.dashboard()); } catch (e) { console.error(e); } finally { setLoading(false); }
-  };
-  const loadTrends = async () => {
-    try { setMoodData(await api.trends.mood(30)); } catch (e) { console.error(e); }
+  useEffect(() => { loadAll(); }, []);
+
+  const loadAll = async () => {
+    try {
+      const [d, mood, weekly, gdist] = await Promise.all([
+        api.dashboard(),
+        api.trends.mood(30),
+        api.analytics.weeklySummary(),
+        api.analytics.goalDistribution(),
+      ]);
+      setData(d); setMoodData(mood); setWeeklySummary(weekly); setGoalDist(gdist);
+    } catch (e) { console.error(e); } finally { setLoading(false); }
   };
 
   const doExport = async () => {
@@ -68,7 +83,7 @@ export default function Dashboard() {
   };
 
   if (loading) return <div className="loading">加载中…</div>;
-  if (!data) return <div className="empty"><p>加载失败</p><button className="btn btn-primary" onClick={load}>重试</button></div>;
+  if (!data) return <div className="empty"><p>加载失败</p><button className="btn btn-primary" onClick={loadAll}>重试</button></div>;
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -111,6 +126,36 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Weekly Summary */}
+      {weeklySummary && (
+        <div className="card">
+          <h2>📅 最近 7 天汇总</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 16 }}>
+            <div style={{ textAlign: 'center', padding: 12, background: 'var(--bg)', borderRadius: 8 }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: weeklySummary.summary.habits_completion_rate >= 80 ? 'var(--success)' : weeklySummary.summary.habits_completion_rate >= 50 ? 'var(--warning)' : 'var(--danger)' }}>{weeklySummary.summary.habits_completion_rate}%</div>
+              <div style={{ fontSize: 12, color: 'var(--sub)' }}>习惯完成率</div>
+            </div>
+            <div style={{ textAlign: 'center', padding: 12, background: 'var(--bg)', borderRadius: 8 }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--accent)' }}>{weeklySummary.summary.journals_written}<span style={{ fontSize: 16, color: 'var(--sub)' }}>/7</span></div>
+              <div style={{ fontSize: 12, color: 'var(--sub)' }}>日记天数</div>
+            </div>
+            <div style={{ textAlign: 'center', padding: 12, background: 'var(--bg)', borderRadius: 8 }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--accent2)' }}>{weeklySummary.summary.avg_mood || '—'}</div>
+              <div style={{ fontSize: 12, color: 'var(--sub)' }}>平均心情 (1-5)</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end', height: 60 }}>
+            {weeklySummary.daily_data.map((d, i) => (
+              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                <div style={{ fontSize: 20 }}>{d.mood ? moodEmojis[d.mood] : '·'}</div>
+                <MiniBar pct={d.habits_total > 0 ? Math.round((d.habits_done / d.habits_total) * 100) : 0} color={d.mood ? 'var(--accent)' : 'var(--border)'} />
+                <div style={{ fontSize: 10, color: 'var(--sub)' }}>{d.weekday}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Mood Trend */}
       {moodData && moodData.length >= 2 && (
         <div className="card">
@@ -121,6 +166,37 @@ export default function Dashboard() {
             <span style={{ fontSize: 12, color: 'var(--sub)' }}>高</span>
           </div>
           <MoodChart data={moodData} />
+        </div>
+      )}
+
+      {/* Goal Distribution */}
+      {goalDist && goalDist.by_status && goalDist.by_status.length > 0 && (
+        <div className="card">
+          <h2>🎯 目标分布</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
+            <div>
+              <h3 style={{ fontSize: 14, color: 'var(--sub)', marginBottom: 10 }}>按状态</h3>
+              {goalDist.by_status.map(s => (
+                <div key={s.status} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <span style={{ width: 60, fontSize: 13 }}>{s.status}</span>
+                  <MiniBar pct={goalDist.by_status.reduce((t, x) => t + x.count, 0) > 0 ? Math.round((s.count / goalDist.by_status.reduce((t, x) => t + x.count, 0)) * 100) : 0} color={s.status === '已完成' ? 'var(--success)' : s.status === '进行中' ? 'var(--accent)' : 'var(--danger)'} />
+                  <span style={{ fontSize: 13, fontWeight: 600, minWidth: 24, textAlign: 'right' }}>{s.count}</span>
+                </div>
+              ))}
+            </div>
+            {goalDist.by_category && goalDist.by_category.length > 0 && (
+              <div>
+                <h3 style={{ fontSize: 14, color: 'var(--sub)', marginBottom: 10 }}>按分类</h3>
+                {goalDist.by_category.map(c => (
+                  <div key={c.category} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <span style={{ width: 60, fontSize: 13 }}>{c.category}</span>
+                    <MiniBar pct={Math.round((c.count / goalDist.by_category.reduce((t, x) => t + x.count, 0)) * 100)} color="var(--accent2)" />
+                    <span style={{ fontSize: 13, fontWeight: 600, minWidth: 24, textAlign: 'right' }}>{c.count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

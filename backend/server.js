@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const cors = require('cors');
 const Database = require('better-sqlite3');
 const jwt = require('jsonwebtoken');
@@ -73,10 +73,8 @@ app.get('/api/auth/me', authMiddleware, (req, res) => {
 app.get('/api/dashboard', authMiddleware, (req, res) => {
   const today = new Date().toISOString().slice(0, 10);
   const uid = req.userId;
-  const q = String.fromCharCode(39);
-
   const goalCount = db.prepare('SELECT COUNT(*) as count FROM goals WHERE user_id = ?').get(uid).count;
-  const goalCompleted = db.prepare('SELECT COUNT(*) as count FROM goals WHERE user_id = ? AND status = ' + q + '已完成' + q).get(uid).count;
+  const goalCompleted = db.prepare('SELECT COUNT(*) as count FROM goals WHERE user_id = ? AND status = ?').get(uid, '已完成').count;
   const habitCount = db.prepare('SELECT COUNT(*) as count FROM habits WHERE user_id = ?').get(uid).count;
 
   const habitTodayDone = db.prepare(
@@ -127,7 +125,7 @@ app.put('/api/goals/:id', authMiddleware, (req, res) => {
   const sets = []; const vals = [];
   fields.forEach(f => { if (req.body[f] !== undefined) { sets.push(f + ' = ?'); vals.push(req.body[f]); } });
   if (sets.length) {
-    sets.push('updated_at = datetime(' + String.fromCharCode(39) + 'now' + String.fromCharCode(39) + ')');
+    sets.push("updated_at = datetime('now')");
     db.prepare('UPDATE goals SET ' + sets.join(', ') + ' WHERE id = ? AND user_id = ?').run(...vals, req.params.id, req.userId);
   }
   res.json(db.prepare('SELECT * FROM goals WHERE id = ? AND user_id = ?').get(req.params.id, req.userId));
@@ -138,6 +136,36 @@ app.delete('/api/goals/:id', authMiddleware, (req, res) => {
   res.json({ ok: true });
 });
 
+
+// ---- Milestones (Goal Subtasks) ----
+app.get('/api/goals/:id/milestones', authMiddleware, (req, res) => {
+  res.json(db.prepare('SELECT * FROM milestones WHERE goal_id = ? ORDER BY sort_order, id').all(req.params.id));
+});
+
+app.post('/api/goals/:id/milestones', authMiddleware, (req, res) => {
+  const { title } = req.body;
+  if (!title || !title.trim()) return res.status(400).json({ error: '里程碑名称不能为空' });
+  const maxSort = db.prepare('SELECT MAX(sort_order) as m FROM milestones WHERE goal_id = ?').get(req.params.id);
+  const r = db.prepare('INSERT INTO milestones (goal_id, title, sort_order) VALUES (?,?,?)').run(req.params.id, title.trim(), (maxSort.m || 0) + 1);
+  res.status(201).json(db.prepare('SELECT * FROM milestones WHERE id = ?').get(r.lastInsertRowid));
+});
+
+app.put('/api/goals/:id/milestones/:mid', authMiddleware, (req, res) => {
+  const { title, completed, sort_order } = req.body;
+  const sets = []; const vals = [];
+  if (title !== undefined) { sets.push('title = ?'); vals.push(title); }
+  if (completed !== undefined) { sets.push('completed = ?'); vals.push(completed ? 1 : 0); }
+  if (sort_order !== undefined) { sets.push('sort_order = ?'); vals.push(sort_order); }
+  if (sets.length) {
+    db.prepare('UPDATE milestones SET ' + sets.join(', ') + ' WHERE id = ? AND goal_id = ?').run(...vals, req.params.mid, req.params.id);
+  }
+  res.json(db.prepare('SELECT * FROM milestones WHERE id = ?').get(req.params.mid));
+});
+
+app.delete('/api/goals/:id/milestones/:mid', authMiddleware, (req, res) => {
+  db.prepare('DELETE FROM milestones WHERE id = ? AND goal_id = ?').run(req.params.mid, req.params.id);
+  res.json({ ok: true });
+});
 // ---- Habits ----
 app.get('/api/habits', authMiddleware, (req, res) => {
   const today = new Date().toISOString().slice(0, 10);
@@ -216,7 +244,7 @@ app.put('/api/journals/:date', authMiddleware, (req, res) => {
   const fields = ['content','mood','grateful','learned']; const sets = []; const vals = [];
   fields.forEach(f => { if (req.body[f] !== undefined) { sets.push(f + ' = ?'); vals.push(req.body[f]); } });
   if (sets.length) {
-    sets.push('updated_at = datetime(' + String.fromCharCode(39) + 'now' + String.fromCharCode(39) + ')');
+    sets.push("updated_at = datetime('now')");
     db.prepare('UPDATE journals SET ' + sets.join(', ') + ' WHERE user_id = ? AND date = ?').run(...vals, req.userId, req.params.date);
   }
   res.json(db.prepare('SELECT * FROM journals WHERE user_id = ? AND date = ?').get(req.userId, req.params.date));
@@ -244,6 +272,69 @@ app.delete('/api/lifewheel/:id', authMiddleware, (req, res) => {
   res.json({ ok: true });
 });
 
+
+// ---- Reviews ----
+app.get('/api/reviews', authMiddleware, (req, res) => {
+  const { type, limit } = req.query;
+  let sql = 'SELECT * FROM reviews WHERE user_id = ?';
+  const params = [req.userId];
+  if (type) { sql += ' AND type = ?'; params.push(type); }
+  sql += ' ORDER BY date DESC';
+  if (limit) { sql += ' LIMIT ?'; params.push(parseInt(limit)); }
+  res.json(db.prepare(sql).all(...params));
+});
+
+app.get('/api/reviews/:type/:date', authMiddleware, (req, res) => {
+  const r = db.prepare('SELECT * FROM reviews WHERE user_id = ? AND type = ? AND date = ?').get(req.userId, req.params.type, req.params.date);
+  if (!r) return res.status(404).json({ error: '回顾不存在' });
+  res.json(r);
+});
+
+app.post('/api/reviews', authMiddleware, (req, res) => {
+  const { date, type, wins, challenges, insights, focus, goal_progress, habit_notes, mood_analysis, next_steps } = req.body;
+  const existing = db.prepare('SELECT id FROM reviews WHERE user_id = ? AND date = ? AND type = ?').get(req.userId, date, type);
+  if (existing) return res.status(400).json({ error: '该日期已有同类型回顾' });
+  db.prepare('INSERT INTO reviews (user_id, date, type, wins, challenges, insights, focus, goal_progress, habit_notes, mood_analysis, next_steps) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(req.userId, date, type, wins||'', challenges||'', insights||'', focus||'', goal_progress||'', habit_notes||'', mood_analysis||'', next_steps||'');
+  res.status(201).json(db.prepare('SELECT * FROM reviews WHERE user_id = ? AND type = ? AND date = ?').get(req.userId, type, date));
+});
+
+app.put('/api/reviews/:id', authMiddleware, (req, res) => {
+  const r = db.prepare('SELECT * FROM reviews WHERE id = ? AND user_id = ?').get(req.params.id, req.userId);
+  if (!r) return res.status(404).json({ error: '回顾不存在' });
+  const fields = ['wins','challenges','insights','focus','goal_progress','habit_notes','mood_analysis','next_steps'];
+  const sets = []; const vals = [];
+  fields.forEach(f => { if (req.body[f] !== undefined) { sets.push(f + ' = ?'); vals.push(req.body[f]); } });
+  if (sets.length) {
+    sets.push("updated_at = datetime('now')");
+    db.prepare('UPDATE reviews SET ' + sets.join(', ') + ' WHERE id = ? AND user_id = ?').run(...vals, req.params.id, req.userId);
+  }
+  res.json(db.prepare('SELECT * FROM reviews WHERE id = ?').get(req.params.id));
+});
+
+app.delete('/api/reviews/:id', authMiddleware, (req, res) => {
+  db.prepare('DELETE FROM reviews WHERE id = ? AND user_id = ?').run(req.params.id, req.userId);
+  res.json({ ok: true });
+});
+
+// ---- Settings ----
+app.get('/api/settings', authMiddleware, (req, res) => {
+  let s = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(req.userId);
+  if (!s) {
+    db.prepare('INSERT INTO user_settings (user_id) VALUES (?)').run(req.userId);
+    s = db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(req.userId);
+  }
+  res.json(s);
+});
+
+app.put('/api/settings', authMiddleware, (req, res) => {
+  const fields = ['habit_reminder','habit_reminder_time','journal_reminder','journal_reminder_time','theme'];
+  const sets = []; const vals = [];
+  fields.forEach(f => { if (req.body[f] !== undefined) { sets.push(f + ' = ?'); vals.push(req.body[f]); } });
+  if (sets.length) {
+    db.prepare('UPDATE user_settings SET ' + sets.join(', ') + ' WHERE user_id = ?').run(...vals, req.userId);
+  }
+  res.json(db.prepare('SELECT * FROM user_settings WHERE user_id = ?').get(req.userId));
+});
 // ---- Export & Trends ----
 app.get('/api/export', authMiddleware, (req, res) => {
   const uid = req.userId;
@@ -289,4 +380,73 @@ app.get('/api/trends/lifewheel-compare', authMiddleware, (req, res) => {
   res.json(db.prepare('SELECT * FROM life_wheels WHERE user_id = ? ORDER BY date DESC LIMIT 2').all(req.userId));
 });
 
+
+// ---- Enhanced Analytics ----
+app.get('/api/analytics/weekly-summary', authMiddleware, (req, res) => {
+  const uid = req.userId;
+  const today = new Date();
+  const weekStart = new Date(today); weekStart.setDate(today.getDate() - 6);
+  const weekStartStr = weekStart.toISOString().slice(0, 10);
+  const todayStr = today.toISOString().slice(0, 10);
+
+  const habits = db.prepare('SELECT id, name, color FROM habits WHERE user_id = ?').all(uid);
+  const dailyData = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    const ds = d.toISOString().slice(0, 10);
+    const mood = db.prepare('SELECT mood FROM journals WHERE user_id = ? AND date = ?').get(uid, ds);
+    const doneHabits = db.prepare('SELECT COUNT(*) as c FROM habit_logs hl JOIN habits h ON hl.habit_id = h.id WHERE h.user_id = ? AND hl.date = ? AND hl.completed = 1').get(uid, ds).c;
+    const totalHabits = habits.length;
+    dailyData.push({ date: ds, weekday: ['日','一','二','三','四','五','六'][d.getDay()], mood: mood ? mood.mood : null, habits_done: doneHabits, habits_total: totalHabits });
+  }
+  const totalDone = dailyData.reduce((s, d) => s + d.habits_done, 0);
+  const totalPossible = dailyData.reduce((s, d) => s + d.habits_total, 0);
+  const journalsWritten = dailyData.filter(d => d.mood !== null).length;
+  const avgMood = dailyData.filter(d => d.mood).reduce((s,d,i,arr) => s + d.mood / arr.length, 0);
+
+  res.json({ daily_data: dailyData, summary: { habits_completion_rate: totalPossible > 0 ? Math.round((totalDone / totalPossible) * 100) : 0, journals_written: journalsWritten, avg_mood: avgMood ? Math.round(avgMood * 10) / 10 : null } });
+});
+
+app.get('/api/analytics/habit-heatmap', authMiddleware, (req, res) => {
+  const uid = req.userId;
+  const days = parseInt(req.query.days) || 90;
+  const today = new Date();
+  const habits = db.prepare('SELECT id, name, color FROM habits WHERE user_id = ?').all(uid);
+  const result = { habits, days: [] };
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    const ds = d.toISOString().slice(0, 10);
+    const dayEntry = { date: ds, weekday: d.getDay(), completions: {} };
+    for (const h of habits) {
+      const log = db.prepare('SELECT completed FROM habit_logs WHERE habit_id = ? AND date = ?').get(h.id, ds);
+      dayEntry.completions[h.id] = log ? !!log.completed : false;
+    }
+    result.days.push(dayEntry);
+  }
+  res.json(result);
+});
+
+app.get('/api/analytics/goal-distribution', authMiddleware, (req, res) => {
+  const uid = req.userId;
+  const byCategory = db.prepare('SELECT category, COUNT(*) as count FROM goals WHERE user_id = ? GROUP BY category').all(uid);
+  const byStatus = db.prepare('SELECT status, COUNT(*) as count FROM goals WHERE user_id = ? GROUP BY status').all(uid);
+  const progressAvg = db.prepare('SELECT AVG(progress) as avg FROM goals WHERE user_id = ?').get(uid).avg || 0;
+  res.json({ by_category: byCategory, by_status: byStatus, avg_progress: Math.round(progressAvg) });
+});
+
+app.get('/api/analytics/mood-monthly', authMiddleware, (req, res) => {
+  const uid = req.userId;
+  const months = parseInt(req.query.months) || 6;
+  const rows = db.prepare("SELECT strftime('%Y-%m', date) as month, AVG(mood) as avg_mood, COUNT(*) as days FROM journals WHERE user_id = ? GROUP BY month ORDER BY month DESC LIMIT ?").all(uid, months);
+  res.json(rows.map(r => ({ ...r, avg_mood: Math.round(r.avg_mood * 10) / 10 })));
+});
+
+// Serve static frontend in production
+const frontendDist = path.join(__dirname, '..', 'frontend', 'dist');
+if (fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+  app.get('/{*splat}', (req, res) => {
+    res.sendFile(path.join(frontendDist, 'index.html'));
+  });
+}
 app.listen(PORT, () => console.log('人生设计系统 API 运行在 http://localhost:' + PORT));

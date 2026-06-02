@@ -1,4 +1,4 @@
-﻿import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 const AuthContext = createContext(null);
 
@@ -6,6 +6,12 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
+
+  const logout = () => {
+    localStorage.removeItem('token');
+    setToken(null);
+    setUser(null);
+  };
 
   const fetchMe = useCallback(async (t) => {
     try {
@@ -24,6 +30,12 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    const onExpired = () => { logout(); window.location.hash = '#/login'; };
+    window.addEventListener('auth-expired', onExpired);
+    return () => window.removeEventListener('auth-expired', onExpired);
+  }, []);
+
+  useEffect(() => {
     if (token) { fetchMe(token); }
     else { setLoading(false); }
   }, [token]);
@@ -32,12 +44,6 @@ export function AuthProvider({ children }) {
     localStorage.setItem('token', newToken);
     setToken(newToken);
     setUser(newUser);
-  };
-
-  const logout = () => {
-    localStorage.removeItem('token');
-    setToken(null);
-    setUser(null);
   };
 
   const getAuthHeaders = () => {
